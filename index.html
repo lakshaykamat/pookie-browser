@@ -1,19 +1,175 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="UTF-8">
-    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
-    <link href="./styles.css" rel="stylesheet">
-    <title>Hello World!</title>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Advanced Electron Browser</title>
+    <style>
+      body {
+        background: linear-gradient(to right, #ff9a9e, #fad0c4);
+      }
+      #browser {
+        flex-grow: 1;
+      }
+      .tab-button {
+        cursor: pointer;
+        padding: 10px;
+        border-bottom: 2px solid transparent;
+        transition: border-color 0.3s ease;
+      }
+      .tab-button.active {
+        border-color: #ec4899; /* Tailwind's pink-600 */
+      }
+    </style>
   </head>
-  <body>
-    <h1>Hello World!</h1>
-    We are using Node.js <span id="node-version"></span>,
-    Chromium <span id="chrome-version"></span>,
-    and Electron <span id="electron-version"></span>.
+  <body class="flex flex-col h-screen">
+    <div id="top-bar" class="w-full bg-white shadow-md p-4 flex items-center">
+      <button
+        id="new-tab-btn"
+        class="p-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600"
+      >
+        New Tab
+      </button>
+      <input
+        type="text"
+        id="url-bar"
+        placeholder="Enter URL or Search Query"
+        class="flex-grow p-2 border border-gray-300 rounded-l-lg focus:outline-none ml-4"
+      />
+      <button
+        onclick="loadURL('url-bar')"
+        class="p-2 bg-pink-500 text-white rounded-r-lg hover:bg-pink-600"
+      >
+        Go
+      </button>
+    </div>
 
-    <!-- You can also require other files to run in this process -->
-    <script src="./renderer.js"></script>
+    <div id="tabs" class="flex overflow-x-auto bg-white shadow-md"></div>
+
+    <webview id="browser" class="flex-grow border-t border-gray-300"></webview>
+
+    <script>
+      let currentTabId = null;
+      const tabs = {};
+
+      function loadURL(inputId) {
+        const url = document.getElementById(inputId).value;
+        const fullURL = getFullURL(url);
+
+        if (currentTabId) {
+          tabs[currentTabId].src = fullURL;
+          document.getElementById("browser").src = fullURL;
+          saveTabsState();
+        }
+      }
+
+      function getFullURL(url) {
+        if (isValidURL(url)) {
+          return url.startsWith("http://") || url.startsWith("https://")
+            ? url
+            : `http://${url}`;
+        } else if (url.includes(".") && !url.includes(" ")) {
+          return `http://${url}`;
+        } else {
+          const query = encodeURIComponent(url);
+          return `https://www.google.com/search?q=${query}`;
+        }
+      }
+
+      function isValidURL(string) {
+        try {
+          new URL(string);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function addEnterKeyListener(inputId) {
+        document
+          .getElementById(inputId)
+          .addEventListener("keypress", function (e) {
+            if (e.key === "Enter") {
+              loadURL(inputId);
+            }
+          });
+      }
+
+      function createNewTab(url = "https://www.google.com") {
+        const tabId = `tab-${Date.now()}`;
+        const tabElement = document.createElement("div");
+        tabElement.id = tabId;
+        tabElement.className = "tab-button";
+        tabElement.innerText = `Tab ${Object.keys(tabs).length + 1}`;
+        tabElement.addEventListener("click", () => {
+          switchToTab(tabId);
+        });
+
+        document.getElementById("tabs").appendChild(tabElement);
+        tabs[tabId] = {
+          element: tabElement,
+          src: url,
+        };
+
+        if (!currentTabId) {
+          switchToTab(tabId);
+        }
+
+        saveTabsState();
+      }
+
+      function switchToTab(tabId) {
+        if (currentTabId) {
+          document.getElementById(currentTabId).classList.remove("active");
+        }
+
+        currentTabId = tabId;
+        document.getElementById(currentTabId).classList.add("active");
+        document.getElementById("url-bar").value = tabs[tabId].src;
+        document.getElementById("browser").src = tabs[tabId].src;
+      }
+
+      function removeTab(tabId) {
+        if (tabs[tabId]) {
+          if (tabId === currentTabId) {
+            delete tabs[tabId];
+            const remainingTabs = Object.keys(tabs);
+            if (remainingTabs.length > 0) {
+              switchToTab(remainingTabs[0]);
+            } else {
+              document.getElementById("browser").src = "";
+              currentTabId = null;
+            }
+          }
+          document.getElementById(tabId).remove();
+          delete tabs[tabId];
+          saveTabsState();
+        }
+      }
+
+      function saveTabsState() {
+        localStorage.setItem("tabs", JSON.stringify(tabs));
+      }
+
+      function loadTabsState() {
+        const savedTabs = JSON.parse(localStorage.getItem("tabs")) || {};
+        for (const [tabId, tabData] of Object.entries(savedTabs)) {
+          createNewTab(tabData.src);
+          tabs[tabId].src = tabData.src;
+        }
+        if (Object.keys(tabs).length > 0) {
+          switchToTab(Object.keys(tabs)[0]);
+        }
+      }
+
+      document.getElementById("new-tab-btn").addEventListener("click", () => {
+        createNewTab();
+      });
+
+      addEnterKeyListener("url-bar");
+
+      // Load saved tabs on startup
+      loadTabsState();
+    </script>
   </body>
 </html>
